@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#0C447C"/>
+<title>BECO · Contadores</title>
+<link rel="manifest" href="manifest.json"/>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --navy:#0C447C; --navy-light:#E8F0FB; --navy-mid:#1a5fa8;
+  --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+  --surface:#ffffff; --bg:#f4f6fb; --border:#e2e8f0;
+  --text:#1e293b; --text2:#64748b; --text3:#94a3b8;
+  --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+
+/* ── SCREEN SYSTEM ── */
+.screen{display:none;flex-direction:column;min-height:100vh}
+.screen.active{display:flex}
+
+/* ── PORTADA ── */
+#screen-portada{align-items:center;justify-content:center;padding:2rem 1rem}
+.portada-inner{width:100%;max-width:520px;display:flex;flex-direction:column;align-items:center}
+.portada-logo{width:72px;height:72px;background:var(--navy);border-radius:16px;
+  display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem}
+.portada-logo svg{width:44px;height:44px;fill:#fff}
+.portada-title{font-size:22px;font-weight:800;color:var(--navy);margin-bottom:.25rem}
+.portada-sub{font-size:13px;color:var(--text2);margin-bottom:.25rem}
+.portada-divider{width:56px;height:3px;background:var(--navy);border-radius:2px;margin:1.5rem auto}
+.portada-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%}
+.portada-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;
+  padding:2rem 1rem 1.5rem;cursor:pointer;transition:border-color .15s,transform .12s;
+  text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;
+  touch-action:manipulation}
+.portada-card:hover{border-color:var(--navy);transform:translateY(-2px)}
+.p-icon{width:60px;height:60px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:28px}
+.p-icon.sup{background:var(--navy-light)}
+.p-icon.tec{background:#f0fdf4}
+.p-title{font-size:15px;font-weight:700;color:var(--text)}
+.p-desc{font-size:11px;color:var(--text2)}
+
+/* ── HEADER ── */
+.app-header{background:var(--navy);color:#fff;padding:0;flex-shrink:0}
+.app-header-inner{display:flex;align-items:center;justify-content:space-between;
+  max-width:1440px;margin:0 auto;padding:0 1.25rem;height:52px}
+.app-mark{width:30px;height:30px;background:#fff;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;font-size:9px;
+  font-weight:800;color:var(--navy);flex-shrink:0}
+.app-title{font-size:14px;font-weight:700;flex:1;padding:0 12px}
+.app-sub{font-size:11px;opacity:.7;font-weight:400}
+.back-btn{padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.25);
+  background:transparent;color:rgba(255,255,255,.75);font-size:11px;cursor:pointer;
+  font-family:inherit;transition:all .15s}
+.back-btn:hover{background:rgba(255,255,255,.15);color:#fff}
+.user-chip{font-size:10px;opacity:.75;max-width:120px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+
+/* ── TABS ── */
+.tab-bar{background:var(--surface);border-bottom:2px solid var(--border);
+  flex-shrink:0;position:sticky;top:0;z-index:40;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.tab-inner{max-width:1440px;margin:0 auto;padding:0 1.25rem;
+  display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tab-inner::-webkit-scrollbar{display:none}
+.tab-btn{padding:12px 20px;font-size:12px;font-weight:500;color:var(--text2);
+  cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;
+  margin-bottom:-2px;transition:all .15s;font-family:inherit;white-space:nowrap;flex-shrink:0}
+.tab-btn.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+/* ── CONTENT ── */
+.content{max-width:1440px;margin:0 auto;padding:1rem 1.25rem;flex:1}
+
+/* ── MES BAR ── */
+.mes-bar{background:var(--surface);border:.5px solid var(--border);border-radius:10px;
+  padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mes-bar label{font-size:12px;font-weight:600;color:var(--text2)}
+.mes-bar select{width:auto;flex:1;min-width:120px;padding:6px 10px;
+  border:1.5px solid var(--border);border-radius:var(--radius);font-size:12px;
+  font-family:inherit;outline:none;color:var(--text);cursor:pointer}
+.mes-bar select:focus{border-color:var(--navy)}
+.act-btn{padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border);
+  background:var(--surface);color:var(--text2);font-size:11px;cursor:pointer;
+  font-family:inherit;font-weight:600;transition:all .15s}
+.act-btn:hover{border-color:var(--navy);color:var(--navy)}
+
+/* ── MEDIDOR CARD ── */
+.med-card{background:var(--surface);border:.5px solid var(--border);
+  border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .2s}
+.med-card.guardado{border-color:var(--ok);border-width:1.5px}
+.med-nombre{font-size:13px;font-weight:700;color:var(--text)}
+.med-serie{font-size:10px;color:var(--text3);font-family:monospace;margin-top:2px}
+.chip{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.chip-ok{background:#dcfce7;color:#16a34a}
+.chip-factor{background:var(--navy-light);color:#0C447C}
+.chip-warn{background:#fef9c3;color:#854d0e}
+.med-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end}
+@media(max-width:520px){.med-grid{grid-template-columns:1fr 1fr}}
+
+/* ── INPUTS ── */
+.field-lbl{font-size:10px;font-weight:600;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.linput input{width:100%;font-size:17px;font-weight:700;font-family:'Courier New',monospace;
+  text-align:center;color:var(--navy);padding:7px 8px;border:1.5px solid var(--border);
+  border-radius:var(--radius);outline:none;transition:border-color .15s}
+.linput input:focus{border-color:var(--navy)}
+.linput input[readonly]{background:var(--bg);color:var(--text2);font-size:13px;font-weight:600}
+.val-real{font-size:11px;color:var(--text2);margin-top:3px;text-align:center}
+.save-btn{width:100%;padding:9px;border-radius:var(--radius);border:none;
+  background:var(--navy);color:#fff;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:background .15s}
+.save-btn:hover{background:var(--navy-mid)}
+.save-btn:disabled{background:var(--text3);cursor:not-allowed}
+
+/* ── STATUS ── */
+.status-line{font-size:11px;margin-top:6px;min-height:16px;color:var(--text2)}
+.status-line.ok{color:var(--ok)}
+.status-line.err{color:var(--err)}
+
+/* ── LOADING ── */
+.loading{display:flex;align-items:center;gap:10px;padding:2rem;
+  color:var(--text2);font-size:13px;justify-content:center}
+.spinner{width:18px;height:18px;border:2px solid var(--border);
+  border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TÉCNICO ── */
+#screen-tec{background:var(--navy)}
+.tec-header{background:var(--navy);color:#fff;padding:12px 16px;
+  display:flex;align-items:center;gap:10px}
+.tec-mark{width:30px;height:30px;background:#fff;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;font-size:9px;
+  font-weight:800;color:var(--navy)}
+.tec-title{font-size:14px;font-weight:700;flex:1}
+.tec-sub{font-size:11px;opacity:.7}
+.tec-content{background:var(--bg);flex:1;border-radius:20px 20px 0 0;
+  overflow-y:auto;padding:20px 16px;max-width:560px;margin:0 auto;width:100%}
+.tec-med-list{display:flex;flex-direction:column;gap:10px}
+.tec-med-item{background:var(--surface);border:1.5px solid var(--border);
+  border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.tec-med-item:hover{border-color:var(--navy)}
+.tec-med-nombre{font-size:14px;font-weight:700;color:var(--text)}
+.tec-med-serie{font-size:11px;color:var(--text3);font-family:monospace;margin-top:2px}
+
+/* ── TEC INGRESO ── */
+.tec-card{background:var(--surface);border-radius:12px;padding:16px;margin-bottom:14px}
+.tec-card-title{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px}
+.tec-card-serie{color:#85B7EB;font-size:12px;font-family:monospace;margin-top:4px}
+.tec-card-factor{color:rgba(255,255,255,.6);font-size:11px;margin-top:2px}
+.tec-field-lbl{font-size:11px;font-weight:600;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.tec-big-input{width:100%;font-size:28px;font-weight:800;font-family:'Courier New',monospace;
+  text-align:center;color:var(--navy);padding:12px;border:2px solid var(--border);
+  border-radius:10px;outline:none;transition:border-color .15s}
+.tec-big-input:focus{border-color:var(--navy)}
+.tec-real{font-size:12px;color:var(--text2);text-align:center;margin-top:6px;min-height:18px}
+.foto-area{border:2px dashed var(--border);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:20px;cursor:pointer;transition:border-color .15s;min-height:100px}
+.foto-area:hover{border-color:var(--navy)}
+.foto-area img{max-height:160px;border-radius:8px;object-fit:cover;width:100%}
+.foto-lbl{font-size:12px;color:var(--text3);margin-top:8px}
+.tec-save-btn{width:100%;padding:14px;border-radius:10px;border:none;
+  background:var(--navy);color:#fff;font-size:15px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:background .15s}
+.tec-save-btn:hover{background:var(--navy-mid)}
+.tec-save-btn:disabled{background:var(--text3);cursor:not-allowed}
+
+/* ── REPORTE / HISTORIAL ── */
+.rpt-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);
+  border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.rpt-table th{background:var(--navy);color:#fff;padding:10px 12px;
+  text-align:left;font-size:11px;font-weight:600;text-transform:uppercase}
+.rpt-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+.rpt-table tr:last-child td{border-bottom:none}
+.rpt-table tr:hover td{background:var(--bg)}
+.canvas-wrap{background:var(--surface);border-radius:10px;padding:16px;margin-top:16px}
+canvas{max-width:100%;border-radius:6px}
+
+/* ── INFORME / MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:16px;padding:1.75rem;
+  width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:1rem;color:var(--navy)}
+.modal input,.modal textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);
+  border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;
+  transition:border-color .15s;margin-bottom:10px}
+.modal input:focus,.modal textarea:focus{border-color:var(--navy)}
+.modal-btns{display:flex;gap:10px;margin-top:.5rem}
+.btn-primary{flex:1;padding:10px;border-radius:var(--radius);border:none;
+  background:var(--navy);color:#fff;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.btn-cancel{padding:8px 16px;border-radius:var(--radius);border:1px solid var(--border);
+  background:var(--surface);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit}
+
+/* ── LOGIN BTN ── */
+.ms-login-btn{display:flex;align-items:center;gap:10px;background:#fff;
+  border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 16px;
+  cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
+  color:var(--text);transition:border-color .15s;margin-top:1rem}
+.ms-login-btn:hover{border-color:var(--navy)}
+.ms-login-btn svg{width:20px;height:20px;flex-shrink:0}
+
+/* ── INFORME PDF ── */
+#informe-preview{background:#fff;padding:24px;border-radius:10px;font-size:12px;
+  border:1px solid var(--border)}
+
+@media(max-width:580px){
+  .content{padding:.75rem}
+  .portada-cards{grid-template-columns:1fr 1fr}
+}
+@media(max-width:400px){
+  .portada-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANTALLA: PORTADA
+══════════════════════════════════════════════════════════ -->
+<div id="screen-portada" class="screen active">
+  <div class="portada-inner">
+    <div class="portada-logo">
+      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    <div class="portada-title">BECO · Contadores</div>
+    <div class="portada-sub">Bijao Electric Company S.A. de C.V.</div>
+    <div class="portada-divider"></div>
+    <div class="portada-cards">
+      <div class="portada-card" onclick="entrarSupervisor()">
+        <div class="p-icon sup">⚙️</div>
+        <div class="p-title">Supervisor</div>
+        <div class="p-desc">Gestión de lecturas, reportes e informes</div>
+      </div>
+      <div class="portada-card" onclick="entrarTecnico()">
+        <div class="p-icon tec">🔌</div>
+        <div class="p-title">Técnico</div>
+        <div class="p-desc">Registro de lectura y foto del medidor</div>
+      </div>
+    </div>
+    <div id="login-status" style="margin-top:1.5rem;font-size:12px;color:var(--text2);text-align:center"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANTALLA: SUPERVISOR
+══════════════════════════════════════════════════════════ -->
+<div id="screen-sup" class="screen">
+  <!-- Header -->
+  <div class="app-header">
+    <div class="app-header-inner">
+      <div class="app-mark">B</div>
+      <div class="app-title">
+        Supervisor <span class="app-sub" id="sup-username"></span>
+      </div>
+      <button class="back-btn" onclick="salir()">← Salir</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <div class="tab-inner">
+      <button class="tab-btn active" onclick="switchTab('tab-lecturas',this)">📋 Lecturas</button>
+      <button class="tab-btn" onclick="switchTab('tab-reporte',this)">📊 Reporte</button>
+      <button class="tab-btn" onclick="switchTab('tab-historial',this)">🗂 Historial</button>
+    </div>
+  </div>
+
+  <!-- TAB: LECTURAS -->
+  <div id="tab-lecturas" class="tab-pane active">
+    <div class="content">
+      <div class="mes-bar">
+        <label>Mes</label>
+        <select id="sel-mes">
+          <option value="1">Enero</option><option value="2">Febrero</option>
+          <option value="3">Marzo</option><option value="4">Abril</option>
+          <option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option>
+          <option value="9">Septiembre</option><option value="10">Octubre</option>
+          <option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <select id="sel-anio"></select>
+        <button class="act-btn" onclick="cargarLecturas()">Buscar</button>
+        <button class="act-btn" onclick="abrirModalInforme()" style="margin-left:auto">
+          📄 Informe
+        </button>
+      </div>
+      <div id="lecturas-cont">
+        <p style="color:var(--text3);text-align:center;padding:2rem">
+          Seleccioná un mes y hacé clic en Buscar.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: REPORTE -->
+  <div id="tab-reporte" class="tab-pane">
+    <div class="content">
+      <div class="mes-bar">
+        <label>Mes</label>
+        <select id="rpt-mes">
+          <option value="1">Enero</option><option value="2">Febrero</option>
+          <option value="3">Marzo</option><option value="4">Abril</option>
+          <option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option>
+          <option value="9">Septiembre</option><option value="10">Octubre</option>
+          <option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <select id="rpt-anio"></select>
+        <button class="act-btn" onclick="generarReporte()">Generar</button>
+      </div>
+      <div id="reporte-cont">
+        <p style="color:var(--text3);text-align:center;padding:2rem">
+          Seleccioná un mes y hacé clic en Generar.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: HISTORIAL -->
+  <div id="tab-historial" class="tab-pane">
+    <div class="content">
+      <div class="mes-bar">
+        <label>Medidor</label>
+        <select id="hist-med"></select>
+        <button class="act-btn" onclick="cargarHistorial()">Ver historial</button>
+      </div>
+      <div id="historial-cont">
+        <p style="color:var(--text3);text-align:center;padding:2rem">
+          Seleccioná un medidor y hacé clic en Ver historial.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PANTALLA: TÉCNICO
+══════════════════════════════════════════════════════════ -->
+<div id="screen-tec" class="screen">
+  <div class="tec-header">
+    <div class="tec-mark">B</div>
+    <div style="flex:1">
+      <div class="tec-title">Técnico <span class="tec-sub" id="tec-view-title"></span></div>
+    </div>
+    <button class="back-btn" id="tec-back-btn" onclick="tecAtras()">← Atrás</button>
+  </div>
+
+  <!-- Vista: lista de medidores -->
+  <div id="tec-lista" class="tec-content">
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      Seleccioná el medidor a registrar:
+    </p>
+    <div id="tec-med-list" class="tec-med-list">
+      <div class="loading"><div class="spinner"></div>Cargando...</div>
+    </div>
+  </div>
+
+  <!-- Vista: ingreso de lectura -->
+  <div id="tec-ingreso" class="tec-content" style="display:none">
+    <div class="tec-card" style="background:var(--navy);color:#fff;margin-bottom:14px">
+      <div class="tec-card-title" id="tec-nombre"></div>
+      <div class="tec-card-serie" id="tec-serie"></div>
+      <div class="tec-card-factor" id="tec-factor-lbl"></div>
+    </div>
+
+    <div class="tec-card">
+      <div class="tec-field-lbl">Valor del medidor (lectura actual)</div>
+      <input type="number" class="tec-big-input" id="tec-display"
+        placeholder="0" min="0" oninput="calcTecReal()"/>
+      <div class="tec-real" id="tec-real"></div>
+    </div>
+
+    <div class="tec-card">
+      <div class="tec-field-lbl">Foto del medidor</div>
+      <div class="foto-area" id="foto-area" onclick="document.getElementById('foto-input').click()">
+        <span style="font-size:28px">📷</span>
+        <div class="foto-lbl">Tocá para tomar o adjuntar foto</div>
+      </div>
+      <input type="file" id="foto-input" accept="image/*" capture="environment"
+        style="display:none" onchange="procesarFoto(this)"/>
+    </div>
+
+    <button class="tec-save-btn" id="tec-save-btn" onclick="guardarTecnico()">
+      💾 Guardar Lectura
+    </button>
+    <div class="status-line" id="tec-status" style="text-align:center;margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL: INFORME
+══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-informe">
+  <div class="modal" style="max-width:420px">
+    <h3>📄 Enviar Informe Mensual</h3>
+    <label style="font-size:11px;font-weight:600;color:var(--text2)">Supervisor firmante</label>
+    <select id="inf-supervisor" style="width:100%;padding:10px;border:1.5px solid var(--border);
+      border-radius:var(--radius);font-size:13px;font-family:inherit;margin:6px 0 12px">
+      <option value="cristhyan">Ing. Cristhyan Vallejos</option>
+      <option value="lenin">Ing. Lenin Castro</option>
+      <option value="martin">Ing. Martín Jiménez</option>
+      <option value="samir">Ing. Samir Zavala</option>
+    </select>
+    <label style="font-size:11px;font-weight:600;color:var(--text2)">
+      Correos destinatarios (uno por línea)
+    </label>
+    <textarea id="inf-destinatarios" rows="4"
+      placeholder="correo@ejemplo.com&#10;otro@ejemplo.com"
+      style="margin-top:6px;resize:vertical"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="cerrarModal('modal-informe')">Cancelar</button>
+      <button class="btn-primary" onclick="enviarInforme()">📤 Enviar</button>
+    </div>
+    <div class="status-line" id="inf-status" style="text-align:center;margin-top:10px"></div>
+  </div>
+</div>
+
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════════
+const CLIENT_ID  = 'f6cd3474-bcc7-4387-8046-30157ab7704f';
+const TENANT_ID  = '79702418-9618-4959-9b30-5ccee5296be9';
+const DRIVE_ID   = 'b!odPVE-52iUujQ91urc-Lo313bV6eZH1Ou3oQ1j-14VSu1HnnnNkLSKc1U1wiIZh2';
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+const BASE_PATH  = 'Manto_Electrico/Contadores';
+
+const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+const COLORES = {
+  'TRAESA':'#2E75B6','TRAMACO':'#1a7a4a',
+  'ALMAGRAN':'#b45309','DyB CANTERAS':'#7B3FA0','TOTAL':'#1F3864'
+};
+
+const SUPERVISORES = {
+  cristhyan: { nombre:'Ing. Cristhyan Vallejos', cargo:'Supervisor Eléctrico' },
+  lenin:     { nombre:'Ing. Lenin Castro',       cargo:'Supervisor Eléctrico' },
+  martin:    { nombre:'Ing. Martín Jiménez',     cargo:'Supervisor Eléctrico' },
+  samir:     { nombre:'Ing. Samir Zavala',       cargo:'Supervisor Eléctrico' }
+};
+
+const MEDIDORES = [
+  { id:1, cliente:'TRAESA',       serie:'101647719', factor:20 },
+  { id:2, cliente:'TRAMACO',      serie:'76453250',  factor:80 },
+  { id:3, cliente:'ALMAGRAN C1',  serie:'HEXING',    factor:1  },
+  { id:4, cliente:'ALMAGRAN C2',  serie:'23020457',  factor:1  },
+  { id:5, cliente:'DyB CANTERAS', serie:'79557146',  factor:20 }
+];
+
+// ════════════════════════════════════════════════════════════
+// MSAL
+// ════════════════════════════════════════════════════════════
+const msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+    redirectUri: REDIRECT_URI
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+};
+
+const SCOPES = ['Files.ReadWrite','Mail.Send','User.Read','offline_access'];
+
+let msalApp = null;
+let currentAccount = null;
+
+async function initMsal() {
+  msalApp = new msal.PublicClientApplication(msalConfig);
+  await msalApp.initialize();
+  const resp = await msalApp.handleRedirectPromise();
+  if (resp && resp.account) {
+    currentAccount = resp.account;
+    msalApp.setActiveAccount(currentAccount);
+  } else {
+    const accounts = msalApp.getAllAccounts();
+    if (accounts.length > 0) {
+      currentAccount = accounts[0];
+      msalApp.setActiveAccount(currentAccount);
+    }
+  }
+  if (currentAccount) {
+    document.getElementById('login-status').textContent =
+      '✅ Sesión activa: ' + currentAccount.username;
+  }
+}
+
+async function getToken() {
+  try {
+    const res = await msalApp.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    return res.accessToken;
+  } catch(e) {
+    await msalApp.acquireTokenRedirect({ scopes: SCOPES });
+  }
+}
+
+async function loginMS() {
+  await msalApp.loginRedirect({ scopes: SCOPES });
+}
+
+// ════════════════════════════════════════════════════════════
+// GRAPH API — helpers
+// ════════════════════════════════════════════════════════════
+async function graphGet(url) {
+  const token = await getToken();
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!r.ok) throw new Error('Graph GET error ' + r.status);
+  return r.json();
+}
+
+async function graphPut(url, body) {
+  const token = await getToken();
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('Graph PUT error ' + r.status);
+  return r.json();
+}
+
+async function graphPutBinary(url, blob, contentType) {
+  const token = await getToken();
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': contentType
+    },
+    body: blob
+  });
+  if (!r.ok) throw new Error('Graph PUT binary error ' + r.status);
+  return r.json();
+}
+
+async function graphPost(url, body) {
+  const token = await getToken();
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('Graph POST error ' + r.status);
+  return r.status === 202 ? true : r.json();
+}
+
+// ════════════════════════════════════════════════════════════
+// ONEDRIVE — leer y escribir JSONs
+// ════════════════════════════════════════════════════════════
+function driveUrl(path) {
+  return `/drives/${DRIVE_ID}/root:/${BASE_PATH}/${path}`;
+}
+
+async function leerJSON(path) {
+  try {
+    const meta = await graphGet(driveUrl(path) + ':/content');
+    // graph devuelve redirect; usar @microsoft.graph.downloadUrl
+    const meta2 = await graphGet(driveUrl(path));
+    const dlUrl = meta2['@microsoft.graph.downloadUrl'];
+    const r = await fetch(dlUrl);
+    return r.json();
+  } catch(e) {
+    return null;
+  }
+}
+
+async function escribirJSON(path, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const token = await getToken();
+  const r = await fetch(
+    `https://graph.microsoft.com/v1.0${driveUrl(path)}:/content`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data, null, 2)
+    }
+  );
+  if (!r.ok) throw new Error('Error escribiendo ' + path + ': ' + r.status);
+  return r.json();
+}
+
+async function subirFoto(path, base64, tipo) {
+  const token = await getToken();
+  const byteStr = atob(base64);
+  const ab = new ArrayBuffer(byteStr.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+  const blob = new Blob([ab], { type: tipo });
+  const r = await fetch(
+    `https://graph.microsoft.com/v1.0${driveUrl(path)}:/content`,
+    {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': tipo },
+      body: blob
+    }
+  );
+  if (!r.ok) throw new Error('Error subiendo foto: ' + r.status);
+  return r.json();
+}
+
+// ════════════════════════════════════════════════════════════
+// LECTURAS — helpers
+// ════════════════════════════════════════════════════════════
+function mesKey(mes, anio) {
+  return `${anio}-${String(mes).padStart(2,'0')}`;
+}
+
+function lecturaPath(mes, anio) {
+  return `datos/lecturas/${mesKey(mes, anio)}.json`;
+}
+
+async function getLecturas(mes, anio) {
+  const data = await leerJSON(lecturaPath(mes, anio));
+  return data || { mes, anio, lecturas: [] };
+}
+
+async function guardarLecturas(mes, anio, data) {
+  return escribirJSON(lecturaPath(mes, anio), data);
+}
+
+function getLecturaAnterior(lecturas, medidor_id) {
+  return lecturas.find(l => l.medidor_id === medidor_id) || null;
+}
+
+function calcConsumo(actual_real, anterior_real) {
+  if (anterior_real === null || anterior_real === undefined) return null;
+  return Math.max(0, actual_real - anterior_real);
+}
+
+function fmt(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-HN', { minimumFractionDigits: 0 });
+}
+
+// ════════════════════════════════════════════════════════════
+// PANTALLAS — navegación
+// ════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  btn.classList.add('active');
+}
+
+function salir() {
+  showScreen('screen-portada');
+}
+
+function cerrarModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════════════
+// SUPERVISOR — entrada
+// ════════════════════════════════════════════════════════════
+async function entrarSupervisor() {
+  if (!currentAccount) {
+    document.getElementById('login-status').innerHTML =
+      '<button class="ms-login-btn" onclick="loginMS()" style="margin:0 auto">' +
+      '<svg viewBox="0 0 21 21"><rect width="10" height="10" fill="#f25022"/>' +
+      '<rect x="11" width="10" height="10" fill="#7fba00"/>' +
+      '<rect y="11" width="10" height="10" fill="#00a4ef"/>' +
+      '<rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>' +
+      'Iniciar sesión con Microsoft</button>';
+    return;
+  }
+  document.getElementById('sup-username').textContent = currentAccount.username;
+  initSelAnios();
+  poblarHistMed();
+  showScreen('screen-sup');
+}
+
+function initSelAnios() {
+  const now = new Date();
+  const cy  = now.getFullYear();
+  const cm  = now.getMonth() + 1;
+  ['sel-mes','rpt-mes'].forEach(id => {
+    document.getElementById(id).value = cm;
+  });
+  ['sel-anio','rpt-anio'].forEach(id => {
+    const s = document.getElementById(id);
+    s.innerHTML = '';
+    for (let y = cy; y >= 2024; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y; s.appendChild(o);
+    }
+  });
+}
+
+function poblarHistMed() {
+  const sel = document.getElementById('hist-med');
+  sel.innerHTML = '';
+  MEDIDORES.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = m.cliente + ' (' + m.serie + ')';
+    sel.appendChild(o);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// SUPERVISOR — cargar lecturas del mes
+// ════════════════════════════════════════════════════════════
+async function cargarLecturas() {
+  const mes  = parseInt(document.getElementById('sel-mes').value);
+  const anio = parseInt(document.getElementById('sel-anio').value);
+  const cont = document.getElementById('lecturas-cont');
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando lecturas...</div>';
+
+  // Mes anterior para calcular consumo
+  let mesAnt = mes - 1, anioAnt = anio;
+  if (mesAnt === 0) { mesAnt = 12; anioAnt--; }
+
+  const [dataAct, dataAnt] = await Promise.all([
+    getLecturas(mes, anio),
+    getLecturas(mesAnt, anioAnt)
+  ]);
+
+  // Determinar si el mes actual ya pasó (cerrado = solo lectura)
+  const now    = new Date();
+  const cerrado = (anio < now.getFullYear()) ||
+                  (anio === now.getFullYear() && mes < now.getMonth() + 1);
+
+  let html = '';
+  for (const m of MEDIDORES) {
+    const lAct = dataAct.lecturas.find(l => l.medidor_id === m.id) || null;
+    const lAnt = dataAnt.lecturas.find(l => l.medidor_id === m.id) || null;
+    const antReal = lAnt ? lAnt.lectura_real : null;
+    const actReal = lAct ? lAct.lectura_real : null;
+    const consumo = (actReal !== null && antReal !== null)
+      ? calcConsumo(actReal, antReal) : null;
+
+    const color = COLORES[m.cliente] || COLORES['TRAESA'];
+    const chipEstado = lAct
+      ? '<span class="chip chip-ok">✓ Guardado</span>'
+      : '<span class="chip chip-warn">Pendiente</span>';
+
+    html += `
+    <div class="med-card ${lAct ? 'guardado' : ''}" id="card-${m.id}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="med-nombre" style="color:${color}">${m.cliente}</div>
+          <div class="med-serie">Serie: <strong>${m.serie}</strong>
+            &nbsp;·&nbsp;<span class="chip chip-factor">Factor ×${m.factor}</span>
+          </div>
+        </div>
+        ${chipEstado}
+      </div>
+      <div class="med-grid">
+        <div>
+          <div class="field-lbl">Lectura anterior</div>
+          <div class="linput">
+            <input type="number" readonly
+              value="${lAnt ? lAnt.lectura_display : ''}"
+              placeholder="—"/>
+          </div>
+          <div class="val-real">${antReal !== null ? 'Real: '+fmt(antReal)+' kWh' : ''}</div>
+        </div>
+        <div>
+          <div class="field-lbl">Lectura actual</div>
+          <div class="linput">
+            <input type="number" id="disp-${m.id}"
+              ${cerrado ? 'readonly' : ''}
+              value="${lAct ? lAct.lectura_display : ''}"
+              placeholder="0"
+              oninput="actualizarReal(${m.id},${m.factor})"/>
+          </div>
+          <div class="val-real" id="real-${m.id}">
+            ${actReal !== null ? 'Real: '+fmt(actReal)+' kWh' : ''}
+          </div>
+        </div>
+        <div>
+          <div class="field-lbl">Consumo</div>
+          <div class="linput">
+            <input type="number" readonly
+              id="cons-${m.id}"
+              value="${consumo !== null ? consumo : ''}"
+              placeholder="—"/>
+          </div>
+          <div class="val-real" id="cons-lbl-${m.id}">
+            ${consumo !== null ? fmt(consumo)+' kWh' : ''}
+          </div>
+        </div>
+      </div>
+      ${!cerrado ? `
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <button class="save-btn" onclick="supGuardar(${m.id},${m.factor},${mes},${anio},${antReal ?? 'null'})">
+          💾 Guardar
+        </button>
+        ${lAct ? `<button class="act-btn" style="color:var(--err);border-color:var(--err)"
+          onclick="borrarLectura(${m.id},${mes},${anio})">🗑 Borrar</button>` : ''}
+      </div>
+      <div class="status-line" id="st-${m.id}"></div>` : ''}
+    </div>`;
+  }
+
+  cont.innerHTML = html || '<p style="color:var(--text3);text-align:center;padding:2rem">Sin medidores.</p>';
+}
+
+function actualizarReal(mid, factor) {
+  const disp = parseFloat(document.getElementById('disp-'+mid).value);
+  if (isNaN(disp)) {
+    document.getElementById('real-'+mid).textContent = '';
+    return;
+  }
+  const real = disp * factor;
+  document.getElementById('real-'+mid).textContent = 'Real: ' + fmt(real) + ' kWh';
+}
+
+async function supGuardar(mid, factor, mes, anio, antReal) {
+  const dispEl = document.getElementById('disp-'+mid);
+  const stEl   = document.getElementById('st-'+mid);
+  const disp   = parseFloat(dispEl.value);
+  if (isNaN(disp) || disp < 0) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Ingresá un valor válido.';
+    return;
+  }
+  stEl.className = 'status-line';
+  stEl.textContent = 'Guardando...';
+
+  const real    = disp * factor;
+  const consumo = antReal !== null ? calcConsumo(real, antReal) : null;
+
+  try {
+    const data = await getLecturas(mes, anio);
+    const idx  = data.lecturas.findIndex(l => l.medidor_id === mid);
+    const reg  = { medidor_id: mid, lectura_display: disp,
+                   lectura_real: real, consumo, timestamp: new Date().toISOString() };
+    if (idx >= 0) data.lecturas[idx] = reg;
+    else data.lecturas.push(reg);
+    await guardarLecturas(mes, anio, data);
+
+    stEl.className = 'status-line ok';
+    stEl.textContent = '✓ Guardado correctamente';
+    document.getElementById('card-'+mid).classList.add('guardado');
+
+    // Actualizar consumo en pantalla
+    if (consumo !== null) {
+      document.getElementById('cons-'+mid).value = consumo;
+      document.getElementById('cons-lbl-'+mid).textContent = fmt(consumo) + ' kWh';
+    }
+  } catch(e) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function borrarLectura(mid, mes, anio) {
+  if (!confirm('¿Borrar la lectura de este medidor?')) return;
+  try {
+    const data = await getLecturas(mes, anio);
+    data.lecturas = data.lecturas.filter(l => l.medidor_id !== mid);
+    await guardarLecturas(mes, anio, data);
+    cargarLecturas();
+  } catch(e) {
+    alert('Error al borrar: ' + e.message);
+  }
+}
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// REPORTE MENSUAL + GRÁFICA
+// ════════════════════════════════════════════════════════════
+async function generarReporte() {
+  const mes  = parseInt(document.getElementById('rpt-mes').value);
+  const anio = parseInt(document.getElementById('rpt-anio').value);
+  const cont = document.getElementById('reporte-cont');
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Generando reporte...</div>';
+
+  let mesAnt = mes - 1, anioAnt = anio;
+  if (mesAnt === 0) { mesAnt = 12; anioAnt--; }
+
+  const [dataAct, dataAnt] = await Promise.all([
+    getLecturas(mes, anio),
+    getLecturas(mesAnt, anioAnt)
+  ]);
+
+  // Calcular ALMAGRAN total (C1 + C2)
+  const rows = [];
+  let totalConsumo = 0;
+  let algC1 = null, algC2 = null;
+
+  for (const m of MEDIDORES) {
+    const lAct = dataAct.lecturas.find(l => l.medidor_id === m.id);
+    const lAnt = dataAnt.lecturas.find(l => l.medidor_id === m.id);
+    const consumo = lAct && lAnt ? calcConsumo(lAct.lectura_real, lAnt.lectura_real) : null;
+
+    if (m.cliente === 'ALMAGRAN C1') algC1 = consumo;
+    else if (m.cliente === 'ALMAGRAN C2') algC2 = consumo;
+
+    rows.push({ m, lAct, lAnt, consumo });
+    if (consumo !== null) totalConsumo += consumo;
+  }
+
+  const algTotal = (algC1 !== null && algC2 !== null) ? algC1 + algC2 : null;
+
+  let tableHtml = `
+  <table class="rpt-table">
+    <thead>
+      <tr>
+        <th>Cliente</th><th>Serie</th><th>Factor</th>
+        <th>Lect. Ant.</th><th>Lect. Act.</th><th>Consumo kWh</th>
+      </tr>
+    </thead><tbody>`;
+
+  for (const { m, lAct, lAnt, consumo } of rows) {
+    const color = COLORES[m.cliente] || '#333';
+    tableHtml += `
+      <tr>
+        <td><strong style="color:${color}">${m.cliente}</strong></td>
+        <td style="font-family:monospace">${m.serie}</td>
+        <td>×${m.factor}</td>
+        <td>${lAnt ? fmt(lAnt.lectura_display) : '—'}</td>
+        <td>${lAct ? fmt(lAct.lectura_display) : '—'}</td>
+        <td><strong>${consumo !== null ? fmt(consumo) : '—'}</strong></td>
+      </tr>`;
+  }
+
+  // Fila ALMAGRAN total
+  if (algTotal !== null) {
+    tableHtml += `
+      <tr style="background:#fff7ed">
+        <td colspan="5" style="text-align:right;font-weight:700;color:${COLORES['ALMAGRAN']}">
+          ALMAGRAN TOTAL</td>
+        <td><strong style="color:${COLORES['ALMAGRAN']}">${fmt(algTotal)}</strong></td>
+      </tr>`;
+  }
+
+  // Fila TOTAL
+  tableHtml += `
+    <tr style="background:var(--navy-light)">
+      <td colspan="5" style="text-align:right;font-weight:700;color:var(--navy)">
+        TOTAL GENERAL</td>
+      <td><strong style="color:var(--navy)">${fmt(totalConsumo)}</strong></td>
+    </tr>
+  </tbody></table>`;
+
+  // Preparar datos para gráfica de tendencia (últimos 6 meses)
+  const tendencia = await cargarTendencia(mes, anio);
+
+  cont.innerHTML = `
+    <div style="margin-bottom:12px;font-size:13px;font-weight:700;color:var(--navy)">
+      Reporte ${MESES[mes]} ${anio}
+    </div>
+    ${tableHtml}
+    <div class="canvas-wrap" style="margin-top:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">
+        Tendencia de consumo (últimos meses)
+      </div>
+      <canvas id="canvas-tendencia"></canvas>
+    </div>`;
+
+  dibujarGrafica('canvas-tendencia', tendencia);
+}
+
+async function cargarTendencia(mesActual, anioActual) {
+  const meses = [];
+  let m = mesActual, a = anioActual;
+  for (let i = 0; i < 6; i++) {
+    meses.unshift({ mes: m, anio: a });
+    m--; if (m === 0) { m = 12; a--; }
+  }
+
+  const datos = await Promise.all(meses.map(x => getLecturas(x.mes, x.anio)));
+
+  return meses.map((x, i) => {
+    const data = datos[i];
+    let total = 0;
+    data.lecturas.forEach(l => { if (l.consumo) total += l.consumo; });
+    return { label: MESES[x.mes].substring(0,3)+' '+x.anio, total };
+  });
+}
+
+function dibujarGrafica(canvasId, tendencia) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const W = canvas.parentElement.clientWidth - 32;
+  canvas.width  = W;
+  canvas.height = 180;
+  const ctx = canvas.getContext('2d');
+  const pad = { top:20, right:20, bottom:40, left:60 };
+  const w   = W - pad.left - pad.right;
+  const h   = canvas.height - pad.top - pad.bottom;
+
+  const vals  = tendencia.map(t => t.total);
+  const maxV  = Math.max(...vals, 1);
+  const stepX = w / (tendencia.length - 1 || 1);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + h - (h * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + w, y); ctx.stroke();
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(fmt(Math.round(maxV * i / 4)), pad.left - 6, y + 4);
+  }
+
+  // Línea
+  ctx.strokeStyle = COLORES['TOTAL']; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  tendencia.forEach((t, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + h - (h * t.total / maxV);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Puntos y etiquetas X
+  tendencia.forEach((t, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + h - (h * t.total / maxV);
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = COLORES['TOTAL']; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(t.label, x, pad.top + h + 16);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// HISTORIAL
+// ════════════════════════════════════════════════════════════
+async function cargarHistorial() {
+  const mid  = parseInt(document.getElementById('hist-med').value);
+  const m    = MEDIDORES.find(x => x.id === mid);
+  const cont = document.getElementById('historial-cont');
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando historial...</div>';
+
+  // Cargar últimos 12 meses
+  const now = new Date();
+  const promises = [];
+  let mes = now.getMonth() + 1, anio = now.getFullYear();
+  for (let i = 0; i < 12; i++) {
+    promises.push(getLecturas(mes, anio).then(d => ({ mes, anio, data: d })));
+    mes--; if (mes === 0) { mes = 12; anio--; }
+  }
+  const resultados = await Promise.all(promises);
+
+  let html = `
+  <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
+    ${m.cliente} — últimos 12 meses
+  </div>
+  <table class="rpt-table">
+    <thead><tr>
+      <th>Mes</th><th>Display</th><th>Real (kWh)</th><th>Consumo (kWh)</th><th></th>
+    </tr></thead><tbody>`;
+
+  for (const { mes, anio, data } of resultados) {
+    const l = data.lecturas.find(x => x.medidor_id === mid);
+    html += `<tr>
+      <td>${MESES[mes]} ${anio}</td>
+      <td>${l ? fmt(l.lectura_display) : '—'}</td>
+      <td>${l ? fmt(l.lectura_real) : '—'}</td>
+      <td>${l && l.consumo !== null ? fmt(l.consumo) : '—'}</td>
+      <td>${l ? `<button class="act-btn" style="color:var(--err);border-color:var(--err);font-size:10px"
+        onclick="borrarLectura(${mid},${mes},${anio})">🗑</button>` : ''}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+// INFORME PDF + ENVÍO POR CORREO
+// ════════════════════════════════════════════════════════════
+function abrirModalInforme() {
+  document.getElementById('inf-status').textContent = '';
+  document.getElementById('modal-informe').classList.add('open');
+}
+
+async function enviarInforme() {
+  const supKey  = document.getElementById('inf-supervisor').value;
+  const destStr = document.getElementById('inf-destinatarios').value.trim();
+  const stEl    = document.getElementById('inf-status');
+
+  if (!destStr) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Ingresá al menos un correo.';
+    return;
+  }
+
+  const destinatarios = destStr.split('\n')
+    .map(s => s.trim()).filter(s => s.includes('@'));
+
+  if (!destinatarios.length) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'No se encontraron correos válidos.';
+    return;
+  }
+
+  stEl.className = 'status-line';
+  stEl.textContent = 'Generando PDF...';
+
+  const mes  = parseInt(document.getElementById('sel-mes').value);
+  const anio = parseInt(document.getElementById('sel-anio').value);
+
+  try {
+    const pdfB64 = await generarPDF(mes, anio, supKey);
+    stEl.textContent = 'Enviando correo...';
+
+    const sup = SUPERVISORES[supKey];
+    const asunto = `Informe de Contadores ${MESES[mes]} ${anio} — BECO`;
+    const cuerpo = `
+      <p>Estimado(a),</p>
+      <p>Se adjunta el informe mensual de lectura de contadores correspondiente a
+      <strong>${MESES[mes]} ${anio}</strong>.</p>
+      <p>Emitido por: <strong>${sup.nombre}</strong>, ${sup.cargo}</p>
+      <p>Bijao Electric Company S.A. de C.V.</p>`;
+
+    const toRecipients = destinatarios.map(e => ({
+      emailAddress: { address: e }
+    }));
+
+    await graphPost('/me/sendMail', {
+      message: {
+        subject: asunto,
+        body: { contentType: 'HTML', content: cuerpo },
+        toRecipients,
+        attachments: [{
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: `Informe_Contadores_${mesKey(mes,anio)}.pdf`,
+          contentType: 'application/pdf',
+          contentBytes: pdfB64
+        }]
+      },
+      saveToSentItems: true
+    });
+
+    stEl.className = 'status-line ok';
+    stEl.textContent = '✓ Informe enviado correctamente.';
+  } catch(e) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function generarPDF(mes, anio, supKey) {
+  let mesAnt = mes - 1, anioAnt = anio;
+  if (mesAnt === 0) { mesAnt = 12; anioAnt--; }
+
+  const [dataAct, dataAnt] = await Promise.all([
+    getLecturas(mes, anio),
+    getLecturas(mesAnt, anioAnt)
+  ]);
+
+  const sup = SUPERVISORES[supKey];
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+
+  // Encabezado
+  doc.setFillColor(12, 68, 124);
+  doc.rect(0, 0, 216, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16); doc.setFont(undefined, 'bold');
+  doc.text('BIJAO ELECTRIC COMPANY S.A. de C.V.', 108, 10, { align: 'center' });
+  doc.setFontSize(11); doc.setFont(undefined, 'normal');
+  doc.text(`Informe de Lectura de Contadores — ${MESES[mes]} ${anio}`, 108, 18, { align: 'center' });
+  doc.text('Depto. de Mantenimiento Eléctrico', 108, 24, { align: 'center' });
+
+  // Tabla
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(9);
+  let y = 36;
+  const cols = [14, 60, 85, 105, 130, 160, 185];
+  const headers = ['Cliente','Serie','Factor','Lect.Ant.','Lect.Act.','Consumo kWh'];
+
+  doc.setFillColor(12, 68, 124);
+  doc.rect(12, y - 4, 192, 7, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold');
+  headers.forEach((h, i) => doc.text(h, cols[i], y));
+  y += 6;
+
+  doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal');
+  let totalConsumo = 0;
+  let algC1 = null, algC2 = null;
+
+  for (const m of MEDIDORES) {
+    const lAct = dataAct.lecturas.find(l => l.medidor_id === m.id);
+    const lAnt = dataAnt.lecturas.find(l => l.medidor_id === m.id);
+    const consumo = lAct && lAnt ? calcConsumo(lAct.lectura_real, lAnt.lectura_real) : null;
+    if (consumo !== null) totalConsumo += consumo;
+    if (m.cliente === 'ALMAGRAN C1') algC1 = consumo;
+    if (m.cliente === 'ALMAGRAN C2') algC2 = consumo;
+
+    if (y > 240) { doc.addPage(); y = 20; }
+    doc.setFillColor(y % 14 === 0 ? 240 : 255, 248, 255);
+    doc.rect(12, y - 4, 192, 7, 'F');
+    doc.text(m.cliente,                              cols[0], y);
+    doc.text(m.serie,                                cols[1], y);
+    doc.text('×' + m.factor,                         cols[2], y);
+    doc.text(lAnt ? fmt(lAnt.lectura_display) : '—', cols[3], y);
+    doc.text(lAct ? fmt(lAct.lectura_display) : '—', cols[4], y);
+    doc.text(consumo !== null ? fmt(consumo) : '—',  cols[5], y);
+    y += 7;
+  }
+
+  // ALMAGRAN total
+  if (algC1 !== null && algC2 !== null) {
+    doc.setFont(undefined, 'bold');
+    doc.text('ALMAGRAN TOTAL', cols[4], y);
+    doc.text(fmt(algC1 + algC2), cols[5], y);
+    doc.setFont(undefined, 'normal');
+    y += 7;
+  }
+
+  // TOTAL GENERAL
+  doc.setFillColor(12, 68, 124);
+  doc.rect(12, y - 4, 192, 7, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold');
+  doc.text('TOTAL GENERAL', cols[4], y);
+  doc.text(fmt(totalConsumo), cols[5], y);
+  y += 14;
+
+  // Firma
+  doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal');
+  doc.setFontSize(10);
+  doc.line(14, y, 90, y);
+  doc.text(sup.nombre, 52, y + 5, { align: 'center' });
+  doc.text(sup.cargo,  52, y + 10, { align: 'center' });
+  doc.text(`Fecha: ${new Date().toLocaleDateString('es-HN')}`, 14, y + 18);
+
+  return doc.output('datauristring').split(',')[1];
+}
+
+// ════════════════════════════════════════════════════════════
+// TÉCNICO
+// ════════════════════════════════════════════════════════════
+let TEC_MED   = null;
+let FOTO_B64  = null;
+let FOTO_TIPO = null;
+
+function entrarTecnico() {
+  renderTecLista();
+  showScreen('screen-tec');
+}
+
+function renderTecLista() {
+  document.getElementById('tec-view-title').textContent = '— Seleccionar medidor';
+  document.getElementById('tec-back-btn').onclick = salir;
+  document.getElementById('tec-lista').style.display  = 'block';
+  document.getElementById('tec-ingreso').style.display = 'none';
+
+  const cont = document.getElementById('tec-med-list');
+  cont.innerHTML = MEDIDORES.map(m => `
+    <div class="tec-med-item" onclick="seleccionarMedidor(${m.id})">
+      <div class="tec-med-nombre">${m.cliente}</div>
+      <div class="tec-med-serie">N/S: ${m.serie}
+        &nbsp;·&nbsp;<span class="chip chip-factor">Factor ×${m.factor}</span>
+      </div>
+    </div>`).join('');
+}
+
+function seleccionarMedidor(mid) {
+  TEC_MED   = MEDIDORES.find(m => m.id === mid);
+  FOTO_B64  = null; FOTO_TIPO = null;
+
+  document.getElementById('tec-view-title').textContent = '— ' + TEC_MED.cliente;
+  document.getElementById('tec-back-btn').onclick = renderTecLista;
+  document.getElementById('tec-lista').style.display   = 'none';
+  document.getElementById('tec-ingreso').style.display = 'block';
+
+  document.getElementById('tec-nombre').textContent =
+    TEC_MED.cliente;
+  document.getElementById('tec-serie').textContent =
+    'N/S: ' + TEC_MED.serie;
+  document.getElementById('tec-factor-lbl').textContent =
+    TEC_MED.factor > 1
+      ? 'Factor ×' + TEC_MED.factor + ' — kWh real = display × ' + TEC_MED.factor
+      : 'Factor ×1 — kWh real = valor del display';
+
+  document.getElementById('tec-display').value = '';
+  document.getElementById('tec-real').textContent = '';
+  document.getElementById('tec-status').textContent = '';
+  document.getElementById('tec-status').className = 'status-line';
+  document.getElementById('foto-area').innerHTML =
+    '<span style="font-size:28px">📷</span><div class="foto-lbl">Tocá para tomar o adjuntar foto</div>';
+}
+
+function calcTecReal() {
+  const disp = parseFloat(document.getElementById('tec-display').value);
+  if (isNaN(disp)) {
+    document.getElementById('tec-real').textContent = '';
+    return;
+  }
+  const real = disp * TEC_MED.factor;
+  document.getElementById('tec-real').textContent =
+    'kWh real: ' + fmt(real) + (TEC_MED.factor > 1 ? ' (' + fmt(disp) + ' × ' + TEC_MED.factor + ')' : '');
+}
+
+function procesarFoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  FOTO_TIPO = file.type;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const b64full = e.target.result;
+    FOTO_B64 = b64full.split(',')[1];
+    const area = document.getElementById('foto-area');
+    area.innerHTML = `<img src="${b64full}" alt="foto medidor"/>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function guardarTecnico() {
+  const disp = parseFloat(document.getElementById('tec-display').value);
+  const stEl = document.getElementById('tec-status');
+  const btn  = document.getElementById('tec-save-btn');
+
+  if (isNaN(disp) || disp < 0) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Ingresá un valor válido.';
+    return;
+  }
+
+  btn.disabled = true;
+  stEl.className = 'status-line';
+  stEl.textContent = 'Guardando...';
+
+  const now  = new Date();
+  const mes  = now.getMonth() + 1;
+  const anio = now.getFullYear();
+  const real = disp * TEC_MED.factor;
+  const ts   = now.toISOString();
+
+  try {
+    // Guardar lectura en JSON del mes
+    const data = await getLecturas(mes, anio);
+    const idx  = data.lecturas.findIndex(l => l.medidor_id === TEC_MED.id);
+    const reg  = { medidor_id: TEC_MED.id, lectura_display: disp,
+                   lectura_real: real, consumo: null, timestamp: ts,
+                   tiene_foto: !!FOTO_B64 };
+    if (idx >= 0) data.lecturas[idx] = reg;
+    else data.lecturas.push(reg);
+    await guardarLecturas(mes, anio, data);
+
+    // Subir foto si existe
+    if (FOTO_B64 && FOTO_TIPO) {
+      const ext     = FOTO_TIPO.split('/')[1] || 'jpg';
+      const fotoPath = `fotos/${mesKey(mes,anio)}_med${TEC_MED.id}_${Date.now()}.${ext}`;
+      stEl.textContent = 'Subiendo foto...';
+      await subirFoto(fotoPath, FOTO_B64, FOTO_TIPO);
+    }
+
+    stEl.className = 'status-line ok';
+    stEl.textContent = '✓ Lectura guardada correctamente.';
+    btn.disabled = false;
+  } catch(e) {
+    stEl.className = 'status-line err';
+    stEl.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+function tecAtras() { renderTecLista(); }
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+window.onload = async () => {
+  await initMsal();
+};
+</script>
+</body>
+</html>
