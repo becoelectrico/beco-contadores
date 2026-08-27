@@ -351,6 +351,19 @@ canvas{max-width:100%}
         </select>
         <select id="rpt-anio"></select>
         <button class="act-btn" onclick="generarReporte()">Generar</button>
+        <button class="act-btn primary" id="btn-ver-informe" onclick="mostrarInforme()" style="display:none">📄 Ver Informe</button>
+        <button class="act-btn primary" id="btn-enviar-informe-rpt" onclick="abrirModalInforme()" style="display:none;background:#1a7a4a;border-color:#1a7a4a">📧 Enviar Informe</button>
+      </div>
+      <!-- Barra supervisor que aprueba -->
+      <div id="inf-sup-bar" style="display:none;background:var(--surface);border:.5px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Supervisor que aprueba:</label>
+        <select id="inf-supervisor-sel" style="flex:1;min-width:200px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:600;font-family:inherit;color:var(--navy);outline:none;cursor:pointer">
+          <option value="">— Seleccionar supervisor —</option>
+          <option value="cristhyan">Ing. Cristhyan Vallejos</option>
+          <option value="lenin">Ing. Lenin Castro</option>
+          <option value="martin">Ing. Martín Jiménez</option>
+          <option value="samir">Ing. Samir Zavala</option>
+        </select>
       </div>
       <div id="reporte-cont">
         <p style="color:var(--text3);text-align:center;padding:2rem">
@@ -933,6 +946,12 @@ async function generarReporte() {
   const mes  = parseInt(document.getElementById('rpt-mes').value);
   const anio = parseInt(document.getElementById('rpt-anio').value);
   const cont = document.getElementById('reporte-cont');
+
+  // Ocultar botones y barra de supervisor
+  document.getElementById('btn-ver-informe').style.display = 'none';
+  document.getElementById('btn-enviar-informe-rpt').style.display = 'none';
+  document.getElementById('inf-sup-bar').style.display = 'none';
+
   cont.innerHTML = '<div class="loading"><div class="spinner"></div>Generando reporte...</div>';
 
   let mesAnt = mes - 1, anioAnt = anio;
@@ -943,10 +962,10 @@ async function generarReporte() {
     getLecturas(mesAnt, anioAnt)
   ]);
 
-  // Calcular ALMAGRAN total (C1 + C2)
   const rows = [];
   let totalConsumo = 0;
   let algC1 = null, algC2 = null;
+  let hayPend = false;
 
   for (const m of MEDIDORES) {
     const lAct = dataAct.lecturas.find(l => l.medidor_id === m.id);
@@ -958,13 +977,12 @@ async function generarReporte() {
 
     rows.push({ m, lAct, lAnt, consumo });
     if (consumo !== null) totalConsumo += consumo;
+    else hayPend = true;
   }
 
   const algTotal = (algC1 !== null && algC2 !== null) ? algC1 + algC2 : null;
 
-  // Construir filas agrupando ALMAGRAN C1+C2
   let filas = '';
-  const grupos = [];
   const algRows = rows.filter(r => r.m.cliente.startsWith('ALMAGRAN'));
   const otrosRows = rows.filter(r => !r.m.cliente.startsWith('ALMAGRAN'));
 
@@ -973,7 +991,7 @@ async function generarReporte() {
     const pend = consumo === null;
     filas += `<tr${pend ? ' class="pend-row"' : ''}>
       <td><strong style="color:${color}">${m.cliente}</strong>
-        <div style="font-size:10px;color:var(--text3);font-family:monospace">Serie: ${m.serie} · Factor ×${m.factor}</div>
+        <div style="font-size:10px;color:var(--text3);font-family:monospace">Serie: ${m.serie}${m.factor>1?' · Factor ×'+m.factor:''}</div>
       </td>
       <td class="num">${lAnt ? fmt(lAnt.lectura_real)+' kWh'+(m.factor>1?'<div style="font-size:10px;color:var(--text3)">display: '+fmt(lAnt.lectura_display)+'</div>':'') : '—'}</td>
       <td class="num">${pend ? '—' : fmt(lAct.lectura_real)+' kWh'+(m.factor>1?'<div style="font-size:10px;color:var(--text3)">display: '+fmt(lAct.lectura_display)+'</div>':'')}</td>
@@ -1004,17 +1022,15 @@ async function generarReporte() {
     <td class="num" style="font-size:15px">${fmt(totalConsumo)} kWh</td>
   </tr>`;
 
-  const tableHtml = `<tbody>${filas}</tbody>`;
-
-  // Preparar datos para gráfica de tendencia (últimos 6 meses)
   const tendencia = await cargarTendencia(mes, anio);
-
   const cid = 'ch' + Date.now();
   const mesAntNombre = MESES[mesAnt] || '';
+
   cont.innerHTML = `
     <div class="rpt-head">
       <h2>Reporte — ${MESES[mes]} ${anio}</h2>
       <p>BECO · Bijao Electric Company S.A. de C.V. · ${new Date().toLocaleString('es-HN')}</p>
+      ${hayPend ? '<p class="warn-msg">⚠ Hay lecturas pendientes de registrar</p>' : ''}
     </div>
     <div class="rtabla-wrap"><table class="rtabla">
       <thead><tr>
@@ -1023,8 +1039,8 @@ async function generarReporte() {
         <th style="text-align:right">Act. ${MESES[mes]} (kWh acum.)</th>
         <th style="text-align:right">kWh a facturar</th>
       </tr></thead>
-      ${tableHtml}
-    </div>
+      <tbody>${filas}</tbody>
+    </table></div>
     <div class="chart-card">
       <div class="chart-title">Tendencia ${anio} — Enero a ${MESES[mes]}</div>
       <div class="chart-legend" id="leg-${cid}"></div>
@@ -1035,6 +1051,17 @@ async function generarReporte() {
 
   const clientesGrafica = ['TRAESA','TRAMACO','ALMAGRAN','DyB CANTERAS'];
   requestAnimationFrame(() => dibujarGrafica(cid, tendencia, clientesGrafica));
+
+  // Mostrar botones de informe y barra de supervisor
+  document.getElementById('btn-ver-informe').style.display = '';
+  document.getElementById('btn-enviar-informe-rpt').style.display = '';
+  document.getElementById('inf-sup-bar').style.display = 'flex';
+}
+
+function mostrarInforme() {
+  const key = document.getElementById('inf-supervisor-sel').value;
+  const sup = key ? SUPERVISORES[key] : { nombre: 'Supervisor Eléctrico', cargo: 'Depto. Mantenimiento Eléctrico' };
+  alert('Función de informe institucional disponible en versión completa.\nSupervisor seleccionado: ' + sup.nombre);
 }
 
 async function cargarTendencia(mesActual, anioActual) {
@@ -1200,6 +1227,10 @@ async function cargarHistorial() {
 // ════════════════════════════════════════════════════════════
 function abrirModalInforme() {
   document.getElementById('inf-status').textContent = '';
+  // Pre-seleccionar supervisor si ya fue elegido en la barra del reporte
+  const supBar = document.getElementById('inf-supervisor-sel');
+  const supModal = document.getElementById('inf-supervisor');
+  if (supBar && supBar.value && supModal) supModal.value = supBar.value;
   document.getElementById('modal-informe').classList.add('open');
 }
 
@@ -1226,8 +1257,9 @@ async function enviarInforme() {
   stEl.className = 'status-line';
   stEl.textContent = 'Generando PDF...';
 
-  const mes  = parseInt(document.getElementById('sel-mes').value);
-  const anio = parseInt(document.getElementById('sel-anio').value);
+  const activeTabRpt = document.getElementById('tab-reporte').classList.contains('active');
+  const mes  = parseInt(activeTabRpt ? document.getElementById('rpt-mes').value : document.getElementById('sel-mes').value);
+  const anio = parseInt(activeTabRpt ? document.getElementById('rpt-anio').value : document.getElementById('sel-anio').value);
 
   try {
     const pdfB64 = await generarPDF(mes, anio, supKey);
