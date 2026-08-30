@@ -1429,9 +1429,7 @@ async function generarPDF(mes, anio, supKey) {
   // ── SECCIÓN: LECTURAS Y CONSUMOS ─────────────────────────
   let y = 56;
   doc.setTextColor(80, 90, 100); doc.setFontSize(7.5); doc.setFont(undefined, 'bold');
-  doc.setLetterSpacing(0.5);
   doc.text('LECTURAS Y CONSUMOS DEL PERÍODO', 14, y);
-  doc.setLetterSpacing(0);
   y += 5;
 
   // Cabecera tabla
@@ -1569,9 +1567,7 @@ async function generarPDF(mes, anio, supKey) {
   if (tendenciaPDF && tendenciaPDF.length >= 2) {
     y += 2;
     doc.setTextColor(80, 90, 100); doc.setFontSize(7.5); doc.setFont(undefined, 'bold');
-    doc.setLetterSpacing(0.5);
     doc.text(`TENDENCIA HISTÓRICA ${anio}`, 14, y);
-    doc.setLetterSpacing(0);
     y += 4;
 
     // Dibujar gráfica directamente en jsPDF
@@ -1655,9 +1651,7 @@ async function generarPDF(mes, anio, supKey) {
   if (lecturasConFoto.length > 0) {
     if (y > 200) { doc.addPage(); y = 16; }
     doc.setTextColor(80,90,100); doc.setFontSize(7.5); doc.setFont(undefined,'bold');
-    doc.setLetterSpacing(0.5);
     doc.text('FOTOGRAFÍAS DE MEDIDORES', 14, y);
-    doc.setLetterSpacing(0);
     y += 6;
 
     const fotoPromesas = lecturasConFoto.slice(0, 6).map(async l => {
