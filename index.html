@@ -658,6 +658,32 @@ async function escribirJSON(path, data) {
   return r.json();
 }
 
+async function subirPDF(path, base64) {
+  const token   = await getToken();
+  const byteStr = atob(base64);
+  const ab      = new ArrayBuffer(byteStr.length);
+  const ia      = new Uint8Array(ab);
+  for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+  const blob = new Blob([ab], { type: 'application/pdf' });
+  const r = await fetch(
+    `https://graph.microsoft.com/v1.0${driveUrl(path)}:/content`,
+    {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' },
+      body: blob
+    }
+  );
+  if (!r.ok) throw new Error('Error subiendo PDF: ' + r.status);
+  return r.json();
+}
+
+async function getFotoUrl(fotoPath) {
+  try {
+    const meta = await graphGet(driveUrl(fotoPath));
+    return meta['@microsoft.graph.downloadUrl'] || null;
+  } catch(e) { return null; }
+}
+
 async function subirFoto(path, base64, tipo) {
   const token = await getToken();
   const byteStr = atob(base64);
@@ -1263,6 +1289,17 @@ async function enviarInforme() {
 
   try {
     const pdfB64 = await generarPDF(mes, anio, supKey);
+
+    // Subir PDF a OneDrive
+    stEl.textContent = 'Guardando PDF en OneDrive...';
+    const pdfOneDrivePath = `informes/Informe_Contadores_${mesKey(mes,anio)}.pdf`;
+    try {
+      await subirPDF(pdfOneDrivePath, pdfB64);
+    } catch(ePdf) {
+      console.warn('No se pudo subir PDF a OneDrive:', ePdf.message);
+      // No bloqueamos el flujo — el correo se envía igual
+    }
+
     stEl.textContent = 'Enviando correo...';
 
     const sup = SUPERVISORES[supKey];
@@ -1378,7 +1415,56 @@ async function generarPDF(mes, anio, supKey) {
   doc.text(fmt(totalConsumo), cols[5], y);
   y += 14;
 
-  // Firma
+  // ── Sección de fotos ──
+  const lecturasConFoto = dataAct.lecturas.filter(l => l.foto_path);
+  if (lecturasConFoto.length > 0) {
+    y += 6;
+    doc.setFillColor(12, 68, 124);
+    doc.rect(12, y - 4, 192, 7, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold'); doc.setFontSize(9);
+    doc.text('FOTOGRAFÍAS DE MEDIDORES', 108, y, { align: 'center' });
+    y += 10;
+    doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal');
+
+    // Cargar fotos en paralelo (máx 6 para no hacer el PDF muy pesado)
+    const fotoPromesas = lecturasConFoto.slice(0, 6).map(async l => {
+      const med = MEDIDORES.find(m => m.id === l.medidor_id);
+      const url = await getFotoUrl(l.foto_path);
+      if (!url) return null;
+      try {
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        return new Promise(res => {
+          const reader = new FileReader();
+          reader.onload = e => res({ b64: e.target.result, cliente: med ? med.cliente : 'Medidor' });
+          reader.onerror = () => res(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch(e) { return null; }
+    });
+
+    const fotos = (await Promise.all(fotoPromesas)).filter(Boolean);
+
+    const fotoW = 58, fotoH = 45, gap = 8, perFila = 3;
+    fotos.forEach((f, i) => {
+      const col = i % perFila;
+      const fila = Math.floor(i / perFila);
+      const fx = 14 + col * (fotoW + gap);
+      const fy = y + fila * (fotoH + 14);
+      if (fy + fotoH + 14 > 260) { doc.addPage(); y = 20 - fila * (fotoH + 14); }
+      try {
+        doc.addImage(f.b64, 'JPEG', fx, fy, fotoW, fotoH);
+      } catch(e) { /* imagen no cargó */ }
+      doc.setFontSize(8);
+      doc.text(f.cliente, fx + fotoW / 2, fy + fotoH + 5, { align: 'center' });
+    });
+
+    const filas = Math.ceil(fotos.length / perFila);
+    y += filas * (fotoH + 14) + 10;
+  }
+
+  // ── Firma ──
+  if (y > 240) { doc.addPage(); y = 20; }
   doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal');
   doc.setFontSize(10);
   doc.line(14, y, 90, y);
@@ -1503,12 +1589,19 @@ async function guardarTecnico() {
     else data.lecturas.push(reg);
     await guardarLecturas(mes, anio, data);
 
-    // Subir foto si existe
+    // Subir foto si existe y guardar ruta en el JSON
     if (FOTO_B64 && FOTO_TIPO) {
-      const ext     = FOTO_TIPO.split('/')[1] || 'jpg';
+      const ext      = FOTO_TIPO.split('/')[1] || 'jpg';
       const fotoPath = `fotos/${mesKey(mes,anio)}_med${TEC_MED.id}_${Date.now()}.${ext}`;
       stEl.textContent = 'Subiendo foto...';
       await subirFoto(fotoPath, FOTO_B64, FOTO_TIPO);
+      // Actualizar el registro con la ruta de la foto
+      const dataUpd = await getLecturas(mes, anio);
+      const idxUpd  = dataUpd.lecturas.findIndex(l => l.medidor_id === TEC_MED.id);
+      if (idxUpd >= 0) {
+        dataUpd.lecturas[idxUpd].foto_path = fotoPath;
+        await guardarLecturas(mes, anio, dataUpd);
+      }
     }
 
     stEl.className = 'tec-msg ok show';
