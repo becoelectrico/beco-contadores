@@ -480,8 +480,21 @@ canvas{max-width:100%}
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     MODAL: INFORME
+     MODAL: FOTOGRAFÍA
 ══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-foto" onclick="cerrarModal('modal-foto')">
+  <div class="modal" style="max-width:480px;text-align:center" onclick="event.stopPropagation()">
+    <div class="modal-title">📷 Fotografía del medidor</div>
+    <div id="foto-modal-body" style="margin:16px 0;min-height:80px;display:flex;align-items:center;justify-content:center">
+      <div class="loading"><div class="spinner"></div>Cargando...</div>
+    </div>
+    <div class="modal-btns" style="justify-content:center">
+      <button class="btn-cancel" onclick="cerrarModal('modal-foto')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="modal-overlay" id="modal-informe">
   <div class="modal" style="max-width:420px;width:100%">
     <div class="modal-title">📧 Enviar Informe por Correo</div>
@@ -867,6 +880,8 @@ function poblarHistMed() {
 // ════════════════════════════════════════════════════════════
 // SUPERVISOR — cargar lecturas del mes
 // ════════════════════════════════════════════════════════════
+const SUP_GUARDADOS = new Set(); // IDs guardados/aprobados en esta sesión
+
 async function cargarLecturas() {
   const mes  = parseInt(document.getElementById('sel-mes').value);
   const anio = parseInt(document.getElementById('sel-anio').value);
@@ -906,10 +921,17 @@ async function cargarLecturas() {
     const consumo = (actReal !== null && antReal !== null)
       ? calcConsumo(actReal, antReal) : null;
 
+    // Bloqueado si: mes cerrado, o ya guardado/aprobado en esta sesión,
+    // o tiene consumo calculado (fue guardado por supervisor previamente)
+    const aprobado  = SUP_GUARDADOS.has(m.id) || (lAct && lAct.consumo !== null && lAct.consumo !== undefined);
+    const bloqueado = cerrado || aprobado;
+
     const color = COLORES[m.cliente] || COLORES['TRAESA'];
-    const chipEstado = lAct
-      ? '<span class="chip chip-ok">✓ Guardado</span>'
-      : '<span class="chip chip-pend">Pendiente</span>';
+    const chipEstado = aprobado
+      ? '<span class="chip chip-ok">✅ Aprobado</span>'
+      : lAct
+        ? '<span class="chip chip-ok">✓ Guardado</span>'
+        : '<span class="chip chip-pend">Pendiente</span>';
 
     html += `
     <div class="med-card ${lAct ? 'guardado' : ''}" id="card-${m.id}">
@@ -936,7 +958,7 @@ async function cargarLecturas() {
           <div class="lbl">Lectura actual</div>
           <div class="linput">
             <input type="number" id="disp-${m.id}"
-              ${cerrado ? 'readonly' : ''}
+              ${bloqueado ? 'readonly' : ''}
               value="${lAct ? lAct.lectura_display : ''}"
               placeholder="0"
               oninput="actualizarReal(${m.id},${m.factor})"/>
@@ -953,19 +975,57 @@ async function cargarLecturas() {
           </div>
         </div>
       </div>
-      ${!cerrado ? `
+      ${!bloqueado ? `
       <div class="med-foot">
         <button class="save-btn" onclick="supGuardar(${m.id},${m.factor},${mes},${anio},${antReal ?? 'null'})">
           💾 Guardar
         </button>
         ${lAct ? `<button class="act-btn" style="color:var(--err);border-color:var(--err)"
           onclick="borrarLectura(${m.id},${mes},${anio})">🗑 Borrar</button>` : ''}
+        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+          📷 Ver fotografía
+        </button>
         <span class="inline-msg" id="st-${m.id}"></span>
-      </div>` : ''}
+      </div>` : aprobado ? `
+      <div class="med-foot">
+        <span class="chip chip-ok" style="font-size:12px">✅ Aprobado por Supervisor</span>
+        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+          📷 Ver fotografía
+        </button>
+      </div>` : `
+      <div class="med-foot">
+        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+          📷 Ver fotografía
+        </button>
+      </div>`}
     </div>`;
   }
 
   cont.innerHTML = html || '<p style="color:var(--text3);text-align:center;padding:2rem">Sin medidores.</p>';
+
+  // Banner modo consulta / completado
+  const todosAprobados = MEDIDORES.every(m => {
+    const lAct = dataAct.lecturas.find(l => l.medidor_id === m.id);
+    return SUP_GUARDADOS.has(m.id) || (lAct && lAct.consumo !== null && lAct.consumo !== undefined);
+  });
+
+  if (cerrado || todosAprobados) {
+    const banner    = document.getElementById('modo-consulta-banner');
+    const bannerMes = document.getElementById('modo-consulta-mes');
+    if (todosAprobados && !cerrado) {
+      banner.style.background = '#e8f5ee';
+      banner.style.borderColor = '#1a7a4a';
+      banner.style.color = '#14532d';
+      banner.innerHTML =
+        `<strong>✅ Lecturas de ${MESES[mes]} ${anio} completadas</strong><br>
+         <span style="font-size:12px">Todos los medidores fueron revisados y aprobados por el Supervisor.</span>`;
+    } else {
+      bannerMes.textContent = (MESES[mes] || 'Mes '+mes) + ' ' + anio;
+    }
+    banner.style.display = 'block';
+  } else {
+    document.getElementById('modo-consulta-banner').style.display = 'none';
+  }
 }
 
 function actualizarReal(mid, factor) {
@@ -982,16 +1042,29 @@ async function supGuardar(mid, factor, mes, anio, antReal) {
   const dispEl = document.getElementById('disp-'+mid);
   const stEl   = document.getElementById('st-'+mid);
   const disp   = parseFloat(dispEl.value);
+  const m      = MEDIDORES.find(x => x.id === mid);
+
   if (isNaN(disp) || disp < 0) {
     stEl.className = 'inline-msg show inline-err';
     stEl.textContent = 'Ingresá un valor válido.';
     return;
   }
-  stEl.className = 'inline-msg show';
-  stEl.textContent = 'Guardando...';
 
   const real    = disp * factor;
   const consumo = antReal !== null ? calcConsumo(real, antReal) : null;
+
+  // Confirmación antes de guardar
+  const confirmar = confirm(
+    `¿Confirmar lectura de ${m.cliente}?\n\n` +
+    `Display: ${fmt(disp)}\n` +
+    `Real: ${fmt(real)} kWh\n` +
+    (consumo !== null ? `Consumo: ${fmt(consumo)} kWh\n\n` : '\n') +
+    `Una vez guardado, este medidor quedará bloqueado.`
+  );
+  if (!confirmar) return;
+
+  stEl.className = 'inline-msg show';
+  stEl.textContent = 'Guardando...';
 
   try {
     const data = await getLecturas(mes, anio);
@@ -1002,18 +1075,73 @@ async function supGuardar(mid, factor, mes, anio, antReal) {
     else data.lecturas.push(reg);
     await guardarLecturas(mes, anio, data);
 
+    // Marcar como guardado en sesión
+    SUP_GUARDADOS.add(mid);
+
+    // Bloquear el card individualmente
     stEl.className = 'inline-msg show inline-ok';
-    stEl.textContent = '✓ Guardado correctamente';
-    document.getElementById('card-'+mid).classList.add('guardado');
+    stEl.textContent = '✓ Guardado y bloqueado';
+    const card = document.getElementById('card-'+mid);
+    card.classList.add('guardado');
+    // Bloquear input y botones del card
+    const input = document.getElementById('disp-'+mid);
+    if (input) input.readOnly = true;
+    const foot = card.querySelector('.med-foot');
+    if (foot) foot.innerHTML =
+      `<span class="chip chip-ok" style="font-size:12px">✅ Aprobado por Supervisor</span>`;
 
     // Actualizar consumo en pantalla
     if (consumo !== null) {
       document.getElementById('cons-'+mid).textContent = fmt(consumo);
       document.getElementById('cons-lbl-'+mid).textContent = 'kWh';
     }
+
+    // Si ya están los 5 — activar modo consulta
+    if (SUP_GUARDADOS.size === MEDIDORES.length) {
+      const banner    = document.getElementById('modo-consulta-banner');
+      const bannerMes = document.getElementById('modo-consulta-mes');
+      bannerMes.textContent = (MESES[mes] || 'Mes '+mes) + ' ' + anio;
+      banner.style.background = '#e8f5ee';
+      banner.style.borderColor = '#1a7a4a';
+      banner.style.color = '#14532d';
+      banner.innerHTML =
+        `<strong>✅ Lecturas de ${MESES[mes]} ${anio} completadas</strong><br>
+         <span style="font-size:12px">Todos los medidores fueron revisados y aprobados por el Supervisor.</span>`;
+      banner.style.display = 'block';
+    }
+
   } catch(e) {
     stEl.className = 'inline-msg show inline-err';
     stEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function verFotografia(fotoPath) {
+  const body = document.getElementById('foto-modal-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando fotografía...</div>';
+  document.getElementById('modal-foto').classList.add('open');
+
+  if (!fotoPath) {
+    body.innerHTML = `
+      <div style="padding:2rem;color:var(--text3);text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">📷</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text2)">Sin fotografía registrada</div>
+        <div style="font-size:12px;margin-top:6px">El técnico no adjuntó una foto para esta lectura.</div>
+      </div>`;
+    return;
+  }
+
+  try {
+    const url = await getFotoUrl(fotoPath);
+    if (!url) throw new Error('No se pudo obtener la foto.');
+    body.innerHTML = `
+      <img src="${url}" alt="Fotografía del medidor"
+        style="max-width:100%;max-height:400px;border-radius:8px;object-fit:contain;box-shadow:0 4px 16px rgba(0,0,0,.15)"/>`;
+  } catch(e) {
+    body.innerHTML = `
+      <div style="padding:2rem;color:var(--err);text-align:center">
+        <div style="font-size:13px">Error al cargar la fotografía.<br>${e.message}</div>
+      </div>`;
   }
 }
 
@@ -1070,6 +1198,26 @@ async function generarReporte() {
     rows.push({ m, lAct, lAnt, consumo });
     if (consumo !== null) totalConsumo += consumo;
     else hayPend = true;
+  }
+
+  // Sin ningún dato registrado → error claro
+  const sinDatos = rows.every(r => !r.lAct);
+  if (sinDatos) {
+    cont.innerHTML = `
+      <div style="text-align:center;padding:3rem 1rem;color:var(--text3)">
+        <div style="font-size:48px;margin-bottom:16px">📭</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:8px">
+          Sin datos para ${MESES[mes]} ${anio}
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          No hay lecturas registradas para este período.<br>
+          Verificá que el técnico haya ingresado los datos del mes.
+        </div>
+      </div>`;
+    document.getElementById('btn-ver-informe').style.display = 'none';
+    document.getElementById('btn-enviar-informe-rpt').style.display = 'none';
+    document.getElementById('inf-sup-bar').style.display = 'none';
+    return;
   }
 
   const algTotal = (algC1 !== null && algC2 !== null) ? algC1 + algC2 : null;
