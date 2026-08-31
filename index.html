@@ -1912,43 +1912,6 @@ async function generarPDF(mes, anio, supKey) {
     }
   }
 
-  // ── SECCIÓN FOTOS (si existen) ────────────────────────────
-  const lecturasConFoto = dataAct.lecturas.filter(l => l.foto_path);
-  if (lecturasConFoto.length > 0) {
-    if (y > 200) { doc.addPage(); y = 16; }
-    doc.setTextColor(80,90,100); doc.setFontSize(7.5); doc.setFont(undefined,'bold');
-    doc.text('FOTOGRAFÍAS DE MEDIDORES', 14, y);
-    y += 6;
-
-    const fotoPromesas = lecturasConFoto.slice(0, 6).map(async l => {
-      const med = MEDIDORES.find(m => m.id === l.medidor_id);
-      const url = await getFotoUrl(l.foto_path);
-      if (!url) return null;
-      try {
-        const resp = await fetch(url);
-        const blob = await resp.blob();
-        return new Promise(res => {
-          const reader = new FileReader();
-          reader.onload = e => res({ b64: e.target.result, cliente: med ? med.cliente : 'Medidor' });
-          reader.onerror = () => res(null);
-          reader.readAsDataURL(blob);
-        });
-      } catch(e) { return null; }
-    });
-
-    const fotos = (await Promise.all(fotoPromesas)).filter(Boolean);
-    const fotoW = 55, fotoH = 42, gap = 7, perFila = 3;
-    fotos.forEach((f, i) => {
-      const col = i % perFila, fila = Math.floor(i / perFila);
-      const fx = 14 + col*(fotoW+gap), fy = y + fila*(fotoH+10);
-      if (fy + fotoH > 260) return;
-      try { doc.addImage(f.b64,'JPEG',fx,fy,fotoW,fotoH); } catch(e){}
-      doc.setFontSize(7.5); doc.setTextColor(60,60,60); doc.setFont(undefined,'normal');
-      doc.text(f.cliente, fx+fotoW/2, fy+fotoH+4, { align:'center' });
-    });
-    y += Math.ceil(fotos.length/perFila)*(fotoH+10) + 6;
-  }
-
   // ── PIE DE PÁGINA ─────────────────────────────────────────
   if (y > 230) { doc.addPage(); y = 16; }
   y += 4;
