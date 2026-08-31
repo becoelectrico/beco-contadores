@@ -1069,8 +1069,11 @@ async function supGuardar(mid, factor, mes, anio, antReal) {
   try {
     const data = await getLecturas(mes, anio);
     const idx  = data.lecturas.findIndex(l => l.medidor_id === mid);
+    // Preservar foto_path si ya existe en el registro del técnico
+    const fotoExistente = idx >= 0 ? (data.lecturas[idx].foto_path || null) : null;
     const reg  = { medidor_id: mid, lectura_display: disp,
-                   lectura_real: real, consumo, timestamp: new Date().toISOString() };
+                   lectura_real: real, consumo, timestamp: new Date().toISOString(),
+                   ...(fotoExistente && { foto_path: fotoExistente, tiene_foto: true }) };
     if (idx >= 0) data.lecturas[idx] = reg;
     else data.lecturas.push(reg);
     await guardarLecturas(mes, anio, data);
