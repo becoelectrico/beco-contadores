@@ -982,19 +982,19 @@ async function cargarLecturas() {
         </button>
         ${lAct ? `<button class="act-btn" style="color:var(--err);border-color:var(--err)"
           onclick="borrarLectura(${m.id},${mes},${anio})">🗑 Borrar</button>` : ''}
-        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+        <button class="act-btn" onclick="verFotografia(${m.id},${mes},${anio})">
           📷 Ver fotografía
         </button>
         <span class="inline-msg" id="st-${m.id}"></span>
       </div>` : aprobado ? `
       <div class="med-foot">
         <span class="chip chip-ok" style="font-size:12px">✅ Aprobado por Supervisor</span>
-        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+        <button class="act-btn" onclick="verFotografia(${m.id},${mes},${anio})">
           📷 Ver fotografía
         </button>
       </div>` : `
       <div class="med-foot">
-        <button class="act-btn" onclick="verFotografia('${lAct ? (lAct.foto_path || '') : ''}')">
+        <button class="act-btn" onclick="verFotografia(${m.id},${mes},${anio})">
           📷 Ver fotografía
         </button>
       </div>`}
@@ -1088,7 +1088,8 @@ async function supGuardar(mid, factor, mes, anio, antReal) {
     if (input) input.readOnly = true;
     const foot = card.querySelector('.med-foot');
     if (foot) foot.innerHTML =
-      `<span class="chip chip-ok" style="font-size:12px">✅ Aprobado por Supervisor</span>`;
+      `<span class="chip chip-ok" style="font-size:12px">✅ Aprobado por Supervisor</span>
+       <button class="act-btn" onclick="verFotografia(${mid},${mes},${anio})">📷 Ver fotografía</button>`;
 
     // Actualizar consumo en pantalla
     if (consumo !== null) {
@@ -1116,22 +1117,27 @@ async function supGuardar(mid, factor, mes, anio, antReal) {
   }
 }
 
-async function verFotografia(fotoPath) {
+async function verFotografia(mid, mes, anio) {
   const body = document.getElementById('foto-modal-body');
   body.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando fotografía...</div>';
   document.getElementById('modal-foto').classList.add('open');
 
-  if (!fotoPath) {
-    body.innerHTML = `
-      <div style="padding:2rem;color:var(--text3);text-align:center">
-        <div style="font-size:40px;margin-bottom:12px">📷</div>
-        <div style="font-size:14px;font-weight:600;color:var(--text2)">Sin fotografía registrada</div>
-        <div style="font-size:12px;margin-top:6px">El técnico no adjuntó una foto para esta lectura.</div>
-      </div>`;
-    return;
-  }
-
   try {
+    // Leer el JSON del mes para obtener la foto_path actualizada
+    const data     = await getLecturas(mes, anio);
+    const lectura  = data.lecturas.find(l => l.medidor_id === mid);
+    const fotoPath = lectura ? (lectura.foto_path || '') : '';
+
+    if (!fotoPath) {
+      body.innerHTML = `
+        <div style="padding:2rem;color:var(--text3);text-align:center">
+          <div style="font-size:40px;margin-bottom:12px">📷</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text2)">Sin fotografía registrada</div>
+          <div style="font-size:12px;margin-top:6px">El técnico no adjuntó una foto para esta lectura.</div>
+        </div>`;
+      return;
+    }
+
     const url = await getFotoUrl(fotoPath);
     if (!url) throw new Error('No se pudo obtener la foto.');
     body.innerHTML = `
