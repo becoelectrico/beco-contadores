@@ -282,6 +282,15 @@ canvas{max-width:100%}
       </div>
     </div>
     <div id="login-status" style="margin-top:1.5rem;font-size:12px;color:var(--text2);text-align:center"></div>
+    <button id="btn-instalar" onclick="instalarApp()"
+      style="display:none;margin-top:16px;padding:10px 24px;background:transparent;
+             border:1.5px solid var(--navy);border-radius:var(--radius);
+             color:var(--navy);font-size:13px;font-weight:600;cursor:pointer;
+             font-family:inherit;transition:background .15s,color .15s"
+      onmouseover="this.style.background='var(--navy)';this.style.color='#fff'"
+      onmouseout="this.style.background='transparent';this.style.color='var(--navy)'">
+      📲 Instalar App
+    </button>
     <div class="portada-footer">BECO · Sistema interno de gestión · v3.0</div>
   </div>
 </div>
@@ -412,6 +421,9 @@ canvas{max-width:100%}
     </div>
     <button class="back-btn" id="tec-back-btn" onclick="tecAtras()">← Atrás</button>
   </div>
+
+  <!-- Banner offline / sincronización -->
+  <div id="tec-sync-banner" style="display:none;padding:10px 16px;font-size:12px;font-weight:600;text-align:center;cursor:pointer"></div>
 
   <!-- Barra de progreso -->
   <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 1.25rem">
@@ -2069,6 +2081,32 @@ async function guardarTecnico() {
   const real = disp * TEC_MED.factor;
   const ts   = now.toISOString();
 
+  // ¿Hay internet?
+  if (!navigator.onLine) {
+    try {
+      await guardarPendiente({
+        medidor_id:      TEC_MED.id,
+        lectura_display: disp,
+        lectura_real:    real,
+        mes, anio, timestamp: ts,
+        foto_b64:  FOTO_B64,
+        foto_tipo: FOTO_TIPO
+      });
+      TEC_COMPLETADOS.add(TEC_MED.id);
+      btn.disabled = false;
+      stEl.className = 'tec-msg ok show';
+      stEl.textContent = '💾 Guardado localmente — sin conexión';
+      await actualizarBannerSync();
+      setTimeout(() => renderTecLista(), 1200);
+    } catch(e) {
+      stEl.className = 'tec-msg err show';
+      stEl.textContent = 'Error al guardar localmente: ' + e.message;
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  // Con internet — flujo normal OneDrive
   try {
     // Guardar lectura
     const data = await getLecturas(mes, anio);
@@ -2109,9 +2147,172 @@ async function guardarTecnico() {
 function tecAtras() { renderTecLista(); }
 
 // ════════════════════════════════════════════════════════════
+// MODO OFFLINE — IndexedDB
+// ════════════════════════════════════════════════════════════
+const DB_NAME    = 'beco_offline';
+const DB_VERSION = 1;
+let   offlineDB  = null;
+
+function abrirDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('pendientes')) {
+        db.createObjectStore('pendientes', { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = e => { offlineDB = e.target.result; res(offlineDB); };
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function guardarPendiente(registro) {
+  const db = offlineDB || await abrirDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction('pendientes', 'readwrite');
+    const req = tx.objectStore('pendientes').add(registro);
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function obtenerPendientes() {
+  const db = offlineDB || await abrirDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction('pendientes', 'readonly');
+    const req = tx.objectStore('pendientes').getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function borrarPendiente(id) {
+  const db = offlineDB || await abrirDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction('pendientes', 'readwrite');
+    const req = tx.objectStore('pendientes').delete(id);
+    req.onsuccess = () => res();
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function actualizarBannerSync() {
+  const pendientes = await obtenerPendientes();
+  const banner     = document.getElementById('tec-sync-banner');
+  if (!banner) return;
+  if (pendientes.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display    = 'block';
+  banner.style.background = '#fff8e1';
+  banner.style.color      = '#5d4037';
+  banner.style.borderBottom = '1px solid #f9a825';
+  banner.innerHTML =
+    `⚠ ${pendientes.length} lectura${pendientes.length>1?'s':''} pendiente${pendientes.length>1?'s':''} de sincronizar &nbsp;
+     <button onclick="sincronizarPendientes()" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+       🔄 Sincronizar ahora
+     </button>`;
+}
+
+async function sincronizarPendientes() {
+  const pendientes = await obtenerPendientes();
+  if (!pendientes.length) return;
+
+  const banner = document.getElementById('tec-sync-banner');
+  banner.style.background = '#e3f2fd';
+  banner.style.color      = '#0C447C';
+  banner.innerHTML        = '🔄 Sincronizando...';
+
+  let ok = 0, errores = 0;
+
+  for (const p of pendientes) {
+    try {
+      // Guardar lectura en OneDrive
+      const data = await getLecturas(p.mes, p.anio);
+      const idx  = data.lecturas.findIndex(l => l.medidor_id === p.medidor_id);
+      const reg  = { medidor_id: p.medidor_id, lectura_display: p.lectura_display,
+                     lectura_real: p.lectura_real, consumo: null,
+                     timestamp: p.timestamp, tiene_foto: true };
+      if (idx >= 0) data.lecturas[idx] = reg;
+      else data.lecturas.push(reg);
+      await guardarLecturas(p.mes, p.anio, data);
+
+      // Subir foto
+      const fotoPath = `fotos/${mesKey(p.mes,p.anio)}_med${p.medidor_id}_${Date.now()}.${p.foto_tipo.split('/')[1]||'jpg'}`;
+      await subirFoto(fotoPath, p.foto_b64, p.foto_tipo);
+
+      // Guardar foto_path en JSON
+      const dataUpd = await getLecturas(p.mes, p.anio);
+      const idxUpd  = dataUpd.lecturas.findIndex(l => l.medidor_id === p.medidor_id);
+      if (idxUpd >= 0) {
+        dataUpd.lecturas[idxUpd].foto_path = fotoPath;
+        await guardarLecturas(p.mes, p.anio, dataUpd);
+      }
+
+      await borrarPendiente(p.id);
+      ok++;
+    } catch(e) {
+      console.error('Error sincronizando medidor', p.medidor_id, e);
+      errores++;
+    }
+  }
+
+  if (errores === 0) {
+    banner.style.background = '#e8f5ee';
+    banner.style.color      = '#14532d';
+    banner.innerHTML        = `✅ ${ok} lectura${ok>1?'s':''} sincronizada${ok>1?'s':''} correctamente`;
+    setTimeout(() => { banner.style.display = 'none'; }, 3000);
+  } else {
+    banner.style.background = '#ffecec';
+    banner.style.color      = '#c00000';
+    banner.innerHTML        =
+      `⚠ ${ok} sincronizada${ok>1?'s':''}, ${errores} con error. &nbsp;
+       <button onclick="sincronizarPendientes()" style="background:var(--err);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+         🔄 Reintentar
+       </button>`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════
+let _deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  const btn = document.getElementById('btn-instalar');
+  if (btn) btn.style.display = 'inline-block';
+});
+
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('btn-instalar');
+  if (btn) btn.style.display = 'none';
+  _deferredInstallPrompt = null;
+});
+
+async function instalarApp() {
+  if (!_deferredInstallPrompt) return;
+  _deferredInstallPrompt.prompt();
+  const { outcome } = await _deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    _deferredInstallPrompt = null;
+    document.getElementById('btn-instalar').style.display = 'none';
+  }
+}
+
 window.onload = async () => {
+  // Registrar Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
+  }
+  // Inicializar IndexedDB
+  await abrirDB();
+  // Mostrar banner si hay pendientes
+  await actualizarBannerSync();
+  // Login Microsoft
   await initMsal();
 };
 </script>
