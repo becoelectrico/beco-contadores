@@ -918,10 +918,19 @@ async function cargarLecturas() {
     getLecturas(mesAnt, anioAnt)
   ]);
 
-  // Determinar si el mes actual ya pasó (cerrado = solo lectura)
-  const now    = new Date();
-  const cerrado = (anio < now.getFullYear()) ||
-                  (anio === now.getFullYear() && mes < now.getMonth() + 1);
+  // Determinar si el mes está cerrado (solo lectura)
+  // Período de gracia: los primeros 5 días del mes siguiente
+  // el supervisor puede aprobar el mes anterior
+  const now     = new Date();
+  const diaHoy  = now.getDate();
+  const mesHoy  = now.getMonth() + 1;
+  const anioHoy = now.getFullYear();
+
+  const esMesAnterior = (anio === anioHoy && mes === mesHoy - 1) ||
+                        (mesHoy === 1 && mes === 12 && anio === anioHoy - 1);
+  const enGracia = esMesAnterior && diaHoy <= 5;
+  const cerrado  = !enGracia && ((anio < anioHoy) ||
+                   (anio === anioHoy && mes < mesHoy));
 
   // Banner modo consulta
   const banner = document.getElementById('modo-consulta-banner');
