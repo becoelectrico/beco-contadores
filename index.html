@@ -2076,8 +2076,12 @@ async function guardarTecnico() {
   stEl.textContent = 'Guardando...';
 
   const now  = new Date();
-  const mes  = now.getMonth() + 1;
-  const anio = now.getFullYear();
+  // Las lecturas siempre corresponden al mes anterior
+  // (se toman a principio del mes siguiente para cerrar el período)
+  const mesActual  = now.getMonth() + 1;
+  const anioActual = now.getFullYear();
+  const mes  = mesActual === 1 ? 12 : mesActual - 1;
+  const anio = mesActual === 1 ? anioActual - 1 : anioActual;
   const real = disp * TEC_MED.factor;
   const ts   = now.toISOString();
 
