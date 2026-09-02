@@ -478,7 +478,7 @@ canvas{max-width:100%}
               <div class="sub">JPG, PNG — requerida para guardar</div>
             </div>
           </div>
-          <input type="file" id="foto-input" accept="image/*" capture="environment"
+          <input type="file" id="foto-input" accept="image/*"
             style="display:none" onchange="procesarFoto(this)"/>
         </div>
       </div>
@@ -855,6 +855,15 @@ async function entrarSupervisor() {
       'Iniciar sesión con Microsoft</button>';
     return;
   }
+
+  // PIN de acceso supervisor
+  const pin = prompt('🔐 Ingresá el PIN de acceso para Supervisor:');
+  if (pin === null) return; // canceló
+  if (pin !== '2015') {
+    alert('❌ PIN incorrecto. Acceso denegado.');
+    return;
+  }
+
   document.getElementById('sup-username').textContent = '✉ ' + currentAccount.username;
   initSelAnios();
   poblarHistMed();
